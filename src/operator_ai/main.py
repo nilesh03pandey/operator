@@ -515,12 +515,12 @@ async def async_main() -> None:
             store = get_store(embed_dimensions=config.memory.embed_dimensions)
             memory_store: MemoryStore | None = MemoryStore(store, config.memory)
             harvester = (
-                MemoryHarvester(memory_store, store, config.memory.harvester)
+                MemoryHarvester(memory_store, store, config.memory.harvester, tz=config.tz)
                 if config.memory.harvester.enabled
                 else None
             )
             cleaner = (
-                MemoryCleaner(memory_store, store, config.memory.cleaner)
+                MemoryCleaner(memory_store, store, config.memory.cleaner, tz=config.tz)
                 if config.memory.cleaner.enabled
                 else None
             )
