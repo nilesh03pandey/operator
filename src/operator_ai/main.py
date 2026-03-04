@@ -15,6 +15,7 @@ import operator_ai.tools  # noqa: F401
 from operator_ai.agent import run_agent
 from operator_ai.config import OPERATOR_DIR, Config, load_config
 from operator_ai.jobs import JobRunner
+from operator_ai.log_context import RunContextFilter, new_run_id, set_run_context
 from operator_ai.memory import MemoryCleaner, MemoryHarvester, MemoryStore
 from operator_ai.prompts import assemble_system_prompt
 from operator_ai.status import StatusIndicator
@@ -165,6 +166,7 @@ class Dispatcher:
             return
 
         agent_name = transport.agent_name
+        set_run_context(agent=agent_name, run_id=new_run_id())
         conversation_id = self.store.lookup_platform_message(
             msg.transport_name, msg.root_message_id
         )
@@ -181,8 +183,7 @@ class Dispatcher:
         # Resolve platform context (cached)
         ctx = await transport.resolve_context(msg)
         logger.info(
-            "[%s] message from %s in %s thread=%s",
-            agent_name,
+            "message from %s in %s thread=%s",
             ctx.user_name,
             ctx.channel_name,
             msg.root_message_id[:8],
@@ -215,7 +216,7 @@ class Dispatcher:
         # Claim the conversation — atomic check-and-set (no yield between
         # read and write, so no other task can interleave in asyncio).
         if not runtime.try_claim():
-            logger.info("[%s] conversation %s busy, rejecting", agent_name, conversation_id)
+            logger.info("conversation %s busy, rejecting", conversation_id)
             await transport.send(
                 msg.channel_id,
                 "Still processing a request. Send `!stop` to cancel it.",
@@ -300,11 +301,11 @@ class Dispatcher:
             )
 
         msg_count = sum(1 for m in messages if m.get("role") == "user")
-        logger.info("[%s] conversation %s — message #%d", agent_name, conversation_id, msg_count)
+        logger.info("conversation %s — message #%d", conversation_id, msg_count)
 
         async def on_message(text: str) -> None:
             preview = text[:25].replace("\n", " ")
-            logger.info("[%s] → %s…", agent_name, preview)
+            logger.info("→ %s…", preview)
             message_id = await transport.send(msg.channel_id, text, thread_id=msg.root_message_id)
             self.store.index_platform_message(msg.transport_name, message_id, conversation_id)
 
@@ -333,15 +334,15 @@ class Dispatcher:
                 extra_tools=transport.get_tools(),
                 usage=usage,
             )
-            logger.info("[%s] conversation %s — done", agent_name, conversation_id)
+            logger.info("conversation %s — done", conversation_id)
             if usage:
                 usage_line = _format_usage(usage)
                 await transport.send(msg.channel_id, usage_line, thread_id=msg.root_message_id)
         except AgentCancelledError:
-            logger.info("[%s] conversation %s — stopped by user", agent_name, conversation_id)
+            logger.info("conversation %s — stopped by user", conversation_id)
             await transport.send(msg.channel_id, "Request stopped.", thread_id=msg.root_message_id)
         except Exception as e:
-            logger.exception("[%s] agent error", agent_name)
+            logger.exception("agent error")
             await transport.send(msg.channel_id, f"[error: {e}]", thread_id=msg.root_message_id)
         finally:
             await status.stop()
@@ -431,7 +432,10 @@ def _setup_logging() -> None:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_file = LOGS_DIR / "operator.log"
 
-    fmt = logging.Formatter("%(asctime)s %(levelname)-5s %(message)s", datefmt="%H:%M:%S")
+    fmt = logging.Formatter(
+        "%(asctime)s %(levelname)-5s %(run_ctx)s%(message)s", datefmt="%H:%M:%S"
+    )
+    ctx_filter = RunContextFilter()
 
     # File handler — rotating, 5MB x 3 files
     fh = logging.handlers.RotatingFileHandler(
@@ -441,6 +445,7 @@ def _setup_logging() -> None:
     )
     fh.setFormatter(fmt)
     fh.setLevel(logging.DEBUG)
+    fh.addFilter(ctx_filter)
 
     root = logging.getLogger("operator")
     root.setLevel(logging.DEBUG)
@@ -451,6 +456,7 @@ def _setup_logging() -> None:
         sh = logging.StreamHandler()
         sh.setFormatter(fmt)
         sh.setLevel(logging.INFO)
+        sh.addFilter(ctx_filter)
         root.addHandler(sh)
 
     # Quiet noisy libs

@@ -13,6 +13,7 @@ import litellm
 from croniter import croniter
 
 from operator_ai.config import CleanerConfig, HarvesterConfig, MemoryConfig
+from operator_ai.log_context import set_run_context
 from operator_ai.prompts import load_prompt
 from operator_ai.store import Store, serialize_float32
 
@@ -183,6 +184,7 @@ class MemoryHarvester:
         logger.info("MemoryHarvester stopped")
 
     async def _tick_loop(self) -> None:
+        set_run_context(agent="harvester")
         try:
             while True:
                 await asyncio.sleep(60)
@@ -192,7 +194,7 @@ class MemoryHarvester:
                 try:
                     await self._tick()
                 except Exception:
-                    logger.exception("MemoryHarvester tick failed")
+                    logger.exception("tick failed")
         except asyncio.CancelledError:
             return
 
@@ -202,7 +204,7 @@ class MemoryHarvester:
 
         conversations = self._store.conversations_updated_since(watermark)
         if not conversations:
-            logger.debug("Harvester: no updated conversations")
+            logger.debug("no updated conversations")
             return
 
         total_extracted = 0
@@ -261,7 +263,7 @@ class MemoryHarvester:
 
         if extraction_failed:
             logger.warning(
-                "Harvester paused watermark advancement at %.6f after extraction failure",
+                "paused watermark advancement at %.6f after extraction failure",
                 new_watermark,
             )
 
@@ -269,7 +271,7 @@ class MemoryHarvester:
             self._store.set_memory_state("watermark", str(new_watermark))
 
         logger.info(
-            "Harvester: reviewed %d conversations, %d messages → %d memories extracted",
+            "reviewed %d conversations, %d messages → %d memories extracted",
             conversations_reviewed,
             total_messages,
             total_extracted,
@@ -330,6 +332,7 @@ class MemoryCleaner:
         logger.info("MemoryCleaner stopped")
 
     async def _tick_loop(self) -> None:
+        set_run_context(agent="cleaner")
         try:
             while True:
                 await asyncio.sleep(60)
@@ -339,14 +342,14 @@ class MemoryCleaner:
                 try:
                     await self._tick()
                 except Exception:
-                    logger.exception("MemoryCleaner tick failed")
+                    logger.exception("tick failed")
         except asyncio.CancelledError:
             return
 
     async def _tick(self) -> None:
         scopes = self._store.get_distinct_scopes()
         if not scopes:
-            logger.debug("Cleaner: no memory scopes to process")
+            logger.debug("no memory scopes to process")
             return
 
         cleaned = 0

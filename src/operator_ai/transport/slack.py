@@ -16,7 +16,7 @@ from typing_extensions import override
 from operator_ai.tools.registry import ToolDef
 from operator_ai.transport.base import IncomingMessage, MessageContext, Transport
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("operator.transport.slack")
 
 MENTION_RE = re.compile(r"<@[A-Z0-9]+>\s*")
 _mrkdwn = SlackMarkdownConverter()

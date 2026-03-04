@@ -4,6 +4,7 @@ import asyncio
 import contextvars
 from typing import Any
 
+from operator_ai.log_context import get_run_context, new_run_id, set_run_context
 from operator_ai.tools.registry import tool
 
 MAX_SUBAGENT_DEPTH = 3
@@ -45,17 +46,26 @@ async def spawn_agent(task: str, context: str = "") -> str:
     # Lazy import to avoid circular dependency (agent -> subagent -> agent)
     from operator_ai.agent import run_agent
 
-    coro = run_agent(
-        messages=messages,
-        models=current_context["models"],
-        max_iterations=min(current_context.get("max_iterations", 10), 10),
-        workspace=current_context.get("workspace", "."),
-        depth=depth + 1,
-        context_ratio=current_context.get("context_ratio", 0.0),
-        max_output_tokens=current_context.get("max_output_tokens"),
-        extra_tools=current_context.get("extra_tools"),
-        usage=current_context.get("usage"),
-    )
+    parent_ctx = get_run_context()
+
+    async def _child() -> str:
+        set_run_context(
+            agent=parent_ctx.agent if parent_ctx else "sub",
+            run_id=parent_ctx.run_id if parent_ctx else new_run_id(),
+            depth=depth + 1,
+        )
+        return await run_agent(
+            messages=messages,
+            models=current_context["models"],
+            max_iterations=min(current_context.get("max_iterations", 10), 10),
+            workspace=current_context.get("workspace", "."),
+            depth=depth + 1,
+            context_ratio=current_context.get("context_ratio", 0.0),
+            max_output_tokens=current_context.get("max_output_tokens"),
+            extra_tools=current_context.get("extra_tools"),
+            usage=current_context.get("usage"),
+        )
+
     # Run in a copied context so the child's configure() call doesn't
     # overwrite the parent's ContextVars (depth, workspace, etc.).
-    return await asyncio.create_task(coro, context=contextvars.copy_context())
+    return await asyncio.create_task(_child(), context=contextvars.copy_context())

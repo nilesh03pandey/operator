@@ -14,6 +14,7 @@ from typing import Any
 from croniter import croniter
 
 from operator_ai.config import LOGIN_SHELL, OPERATOR_DIR, Config
+from operator_ai.log_context import new_run_id, set_run_context
 from operator_ai.prompts import assemble_system_prompt
 from operator_ai.skills import extract_body, parse_frontmatter
 from operator_ai.store import DB_PATH, Store
@@ -242,6 +243,7 @@ async def _execute_job(
     """Full execution: prerun gate -> agent -> postrun -> state."""
     start_time = time.time()
     agent_name = job.agent or config.default_agent()
+    set_run_context(agent=agent_name, run_id=new_run_id())
     state = store.load_job_state(job.name)
     conversation_id = f"job:{job.name}:{int(start_time)}"
     messages: list[dict[str, Any]] = []

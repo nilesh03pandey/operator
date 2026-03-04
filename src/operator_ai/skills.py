@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("operator.skills")
 
 
 @dataclass

@@ -90,8 +90,6 @@ async def run_agent(
     tools_by_name = {t.name: t for t in tools}
     tool_defs = [t.to_openai_tool() for t in tools]
 
-    d = f"d{depth} " if depth else ""
-
     if not models:
         raise ValueError("no models configured")
 
@@ -99,7 +97,7 @@ async def run_agent(
         if check_cancelled:
             check_cancelled()
 
-        step = f"[{d}iter {iteration + 1}/{max_iterations}]"
+        step = f"[iter {iteration + 1}/{max_iterations}]"
 
         # Signal "thinking" before LLM call
         if on_tool_call:

@@ -20,6 +20,7 @@ schedule: "0 9 * * *"
 agent: hermy
 enabled: false
 description: Morning digest
+model: "openai/gpt-4o"
 ---
 Run a summary.
 """,
@@ -33,7 +34,20 @@ Run a summary.
     assert spec.agent == "hermy"
     assert spec.enabled is False
     assert spec.description == "Morning digest"
+    assert spec.model == "openai/gpt-4o"
     assert spec.path.endswith("daily/JOB.md")
+
+
+def test_model_defaults_to_empty_when_omitted(tmp_path: Path) -> None:
+    jobs_dir = tmp_path / "jobs"
+    _write_job(
+        jobs_dir / "basic" / "JOB.md",
+        '---\nschedule: "0 9 * * *"\n---\nDo stuff.\n',
+    )
+
+    specs = scan_job_specs(jobs_dir)
+    assert len(specs) == 1
+    assert specs[0].model == ""
 
 
 def test_scan_job_specs_ignores_invalid_frontmatter(tmp_path: Path) -> None:
