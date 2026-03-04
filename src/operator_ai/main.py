@@ -43,7 +43,15 @@ def _format_usage(usage: dict[str, int]) -> str:
     prompt = usage.get("prompt_tokens", 0)
     completion = usage.get("completion_tokens", 0)
     cached = usage.get("cache_read_input_tokens", 0)
-    return f"In {_format_tokens(prompt)} / Out {_format_tokens(completion)} / Cached {_format_tokens(cached)}"
+    created = usage.get("cache_creation_input_tokens", 0)
+    parts = [
+        f"In {_format_tokens(prompt)}",
+        f"Out {_format_tokens(completion)}",
+        f"Cached {_format_tokens(cached)}",
+    ]
+    if created:
+        parts.append(f"Written {_format_tokens(created)}")
+    return "Usage: " + " / ".join(parts)
 
 
 class AgentCancelledError(Exception):

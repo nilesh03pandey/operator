@@ -12,6 +12,10 @@ PROMPTS_DIR = Path(__file__).parent
 SYSTEM_PROMPT_PATH = OPERATOR_DIR / "SYSTEM.md"
 SKILLS_DIR = OPERATOR_DIR / "skills"
 
+# Sentinel that separates the stable (cacheable) prefix from dynamic content.
+# Must survive DB round-trips (stored in JSON as part of the system message).
+CACHE_BOUNDARY = "\n\n<!-- cache-boundary -->\n\n"
+
 
 def load_prompt(name: str) -> str:
     """Load a bundled prompt template from the prompts/ package directory."""
@@ -49,23 +53,38 @@ def assemble_system_prompt(
     transport_extra: str = "",
     skills_dir: Path = SKILLS_DIR,
 ) -> str:
-    """Assemble the runtime system prompt with shared ordering for chat and jobs."""
-    parts: list[str] = [
+    """Assemble the runtime system prompt with shared ordering for chat and jobs.
+
+    Content is split into a stable prefix (SYSTEM.md, AGENT.md, skills) and a
+    dynamic suffix (context, pinned memories, transport extras) separated by
+    CACHE_BOUNDARY.  The agent layer uses this boundary to apply Anthropic
+    prompt-cache breakpoints so the stable prefix is cached across turns.
+    """
+    # --- Stable prefix (rarely changes, safe to cache) ---
+    stable: list[str] = [
         load_system_prompt(),
         load_agent_prompt(config, agent_name),
     ]
 
-    parts.extend(section.strip() for section in context_sections if section and section.strip())
+    skills_prompt = load_skills_prompt(skills_dir)
+    if skills_prompt:
+        stable.append(skills_prompt)
+
+    # --- Dynamic suffix (changes per conversation / turn) ---
+    dynamic: list[str] = []
+
+    dynamic.extend(section.strip() for section in context_sections if section and section.strip())
 
     pinned_lines = [line for line in pinned_memory_lines if line]
     if pinned_lines:
-        parts.append("# Pinned Memories\n\n" + "\n".join(pinned_lines))
-
-    skills_prompt = load_skills_prompt(skills_dir)
-    if skills_prompt:
-        parts.append(skills_prompt)
+        dynamic.append("# Pinned Memories\n\n" + "\n".join(pinned_lines))
 
     if transport_extra.strip():
-        parts.append(transport_extra.strip())
+        dynamic.append(transport_extra.strip())
 
-    return "\n\n".join(part for part in parts if part)
+    stable_text = "\n\n".join(part for part in stable if part)
+    dynamic_text = "\n\n".join(part for part in dynamic if part)
+
+    if dynamic_text:
+        return stable_text + CACHE_BOUNDARY + dynamic_text
+    return stable_text

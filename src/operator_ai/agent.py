@@ -8,6 +8,7 @@ from typing import Any
 
 import litellm
 
+from operator_ai.prompts import CACHE_BOUNDARY
 from operator_ai.tools import registry as tool_registry
 from operator_ai.tools import set_workspace, subagent
 from operator_ai.tools.registry import ToolDef
@@ -17,31 +18,75 @@ logger = logging.getLogger("operator.agent")
 
 
 def _apply_cache_control(messages: list[dict[str, Any]], model: str) -> list[dict[str, Any]]:
-    """Add cache_control to system messages for Anthropic models.
+    """Add Anthropic cache breakpoints to system prompt and conversation history.
 
-    Converts system message content to block format with an ephemeral
-    cache_control marker so Anthropic caches the system prompt prefix
-    across iterations. Returns messages unchanged for non-Anthropic models.
+    Places up to 3 breakpoints (Anthropic allows 4 max):
+      1. Stable system prompt prefix (SYSTEM.md + AGENT.md + skills)
+      2. Penultimate user/assistant message — caches prior conversation history
+      3. (reserved for future use)
+
+    The stable prefix is cached across conversations.  The conversation
+    breakpoint rolls forward each turn so prior history is served from cache.
+
+    Returns messages unchanged for non-Anthropic models.
     """
     if not model.startswith("anthropic/"):
         return messages
-    result = []
+
+    result: list[dict[str, Any]] = []
+
+    # --- System prompt: split stable prefix / dynamic suffix ---
     for msg in messages:
         if msg.get("role") == "system" and isinstance(msg.get("content"), str):
-            result.append(
-                {
-                    **msg,
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": msg["content"],
-                            "cache_control": {"type": "ephemeral"},
-                        }
-                    ],
-                }
-            )
+            content = msg["content"]
+            if CACHE_BOUNDARY in content:
+                stable, dynamic = content.split(CACHE_BOUNDARY, 1)
+                blocks: list[dict[str, Any]] = [
+                    {
+                        "type": "text",
+                        "text": stable,
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                    {"type": "text", "text": dynamic},
+                ]
+            else:
+                blocks = [
+                    {
+                        "type": "text",
+                        "text": content,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+            result.append({**msg, "content": blocks})
         else:
             result.append(msg)
+
+    # --- Conversation history: cache up to the penultimate user message ---
+    # Find the last two user-role indices (excluding system).
+    user_indices = [i for i, m in enumerate(result) if m.get("role") == "user"]
+    if len(user_indices) >= 2:
+        # Mark the penultimate user message — everything before it is cached.
+        target = user_indices[-2]
+        msg = result[target]
+        content = msg.get("content")
+        if isinstance(content, str):
+            result[target] = {
+                **msg,
+                "content": [
+                    {
+                        "type": "text",
+                        "text": content,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+            }
+        elif isinstance(content, list):
+            # Already block format — add cache_control to the last block
+            new_blocks = list(content)
+            last = {**new_blocks[-1], "cache_control": {"type": "ephemeral"}}
+            new_blocks[-1] = last
+            result[target] = {**msg, "content": new_blocks}
+
     return result
 
 
@@ -161,9 +206,14 @@ async def run_agent(
             usage["completion_tokens"] = usage.get("completion_tokens", 0) + (
                 u.completion_tokens or 0
             )
-            usage["cache_read_input_tokens"] = usage.get("cache_read_input_tokens", 0) + (
-                getattr(u, "cache_read_input_tokens", 0) or 0
-            )
+            # Anthropic: cache_read_input_tokens / cache_creation_input_tokens
+            # OpenAI: prompt_tokens_details.cached_tokens
+            cached_read = getattr(u, "cache_read_input_tokens", 0) or 0
+            if not cached_read:
+                ptd = getattr(u, "prompt_tokens_details", None)
+                if ptd:
+                    cached_read = getattr(ptd, "cached_tokens", 0) or 0
+            usage["cache_read_input_tokens"] = usage.get("cache_read_input_tokens", 0) + cached_read
             usage["cache_creation_input_tokens"] = usage.get("cache_creation_input_tokens", 0) + (
                 getattr(u, "cache_creation_input_tokens", 0) or 0
             )
