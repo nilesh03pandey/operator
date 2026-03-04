@@ -18,7 +18,32 @@ It is intentionally small and file-driven:
 - Turn-safe context truncation against model token budgets
 - Vector memory with automatic harvesting and semantic search (sqlite-vec)
 
+## Quickstart
+
+```sh
+pip install operator-ai
+operator init
+```
+
+This creates `~/.operator/` with a starter config, system prompt, and a default agent. Next:
+
+1. **Edit `~/.operator/operator.yaml`** — set your model, transport, and API key source.
+2. **Set API keys** — export `ANTHROPIC_API_KEY` (or whichever provider you chose), plus transport tokens (e.g. `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`).
+3. **Run it:**
+
+```sh
+operator
+```
+
+The `init` command is idempotent — running it again won't overwrite existing files.
+
 ## Install
+
+```sh
+pip install operator-ai
+```
+
+Or for development:
 
 ```sh
 pip install -e .
@@ -26,7 +51,25 @@ pip install -e .
 
 ## Configuration
 
-Runtime config lives at `~/.operator/operator.yaml`.
+Runtime config lives at `~/.operator/operator.yaml`. The starter config from `operator init` looks like:
+
+```yaml
+defaults:
+  models:
+    - "anthropic/claude-sonnet-4-6"
+  max_iterations: 25
+  context_ratio: 0.5
+  # env_file: "~/.env"        # Load API keys from a dotenv file
+
+agents:
+  default:
+    transport:
+      type: slack
+      bot_token_env: SLACK_BOT_TOKEN
+      app_token_env: SLACK_APP_TOKEN
+```
+
+A more advanced example with multiple agents and model fallbacks:
 
 ```yaml
 defaults:
@@ -135,6 +178,12 @@ Logs are written to `~/.operator/logs/operator.log`.
 ## CLI
 
 The `operator` command doubles as a CLI for inspecting and managing runtime state. Subcommands run standalone (no running service required).
+
+### Init
+
+```sh
+operator init                  # scaffold ~/.operator with starter config and agent
+```
 
 ### Service
 

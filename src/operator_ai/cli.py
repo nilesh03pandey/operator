@@ -69,6 +69,93 @@ def _is_macos() -> bool:
     return sys.platform == "darwin"
 
 
+# ── Init command ──────────────────────────────────────────────
+
+_STARTER_CONFIG = """\
+# Operator configuration
+# Docs: https://github.com/gavinballard/operator
+
+defaults:
+  # Model fallback chain — first model is preferred, rest are fallbacks.
+  # Uses LiteLLM format: provider/model-name
+  models:
+    - "anthropic/claude-sonnet-4-6"
+  max_iterations: 25
+  context_ratio: 0.5
+  # env_file: "~/.env"        # Load API keys from a dotenv file
+
+agents:
+  default:
+    transport:
+      type: slack
+      bot_token_env: SLACK_BOT_TOKEN
+      app_token_env: SLACK_APP_TOKEN
+
+# memory:
+#   embed_model: "openai/text-embedding-3-small"
+#   embed_dimensions: 1536
+#   harvester:
+#     enabled: true
+#     schedule: "*/30 * * * *"
+#     model: "openai/gpt-4.1-mini"
+#   cleaner:
+#     enabled: true
+#     schedule: "0 3 * * *"
+#     model: "openai/gpt-4.1-mini"
+"""
+
+_STARTER_SYSTEM_MD = """\
+# System Prompt
+
+You are a helpful assistant managed by Operator.
+"""
+
+_STARTER_AGENT_MD = """\
+# Default Agent
+
+You are a helpful assistant.
+"""
+
+
+@app.command("init")
+def init() -> None:
+    """Scaffold the ~/.operator directory with starter config."""
+    home = OPERATOR_DIR
+    config_file = home / "operator.yaml"
+
+    if config_file.exists():
+        console.print(f"[bold]{config_file}[/bold] already exists — nothing to do.")
+        return
+
+    # Directories
+    dirs = [
+        home / "logs",
+        home / "state",
+        home / "agents" / "default" / "workspace",
+        home / "jobs",
+        home / "skills",
+    ]
+    for d in dirs:
+        d.mkdir(parents=True, exist_ok=True)
+        console.print(f"  [dim]created[/dim] {d}/")
+
+    # Files — only write if not already present
+    files: list[tuple[Path, str]] = [
+        (config_file, _STARTER_CONFIG),
+        (home / "SYSTEM.md", _STARTER_SYSTEM_MD),
+        (home / "agents" / "default" / "AGENT.md", _STARTER_AGENT_MD),
+    ]
+    for path, content in files:
+        if path.exists():
+            console.print(f"  [yellow]exists[/yellow] {path}")
+        else:
+            path.write_text(content)
+            console.print(f"  [green]wrote[/green]  {path}")
+
+    console.print(f"\n[bold green]Operator initialized at {home}[/bold green]")
+    console.print("Edit [bold]operator.yaml[/bold] to configure your agents and transports.")
+
+
 # ── Default: start the service ───────────────────────────────
 
 
