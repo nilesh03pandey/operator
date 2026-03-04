@@ -377,12 +377,25 @@ src/operator_ai/
     └── jobs.py
 ```
 
+## Development
+
+All work happens on the `dev` branch. Feature branches are optional — branch off `dev` for larger changes, or commit directly to `dev` for small fixes.
+
+```text
+main ← dev ← feat/whatever
+```
+
+- **`dev`** — integration branch. Always runnable. Push freely.
+- **`main`** — release branch. Only updated by merging `dev` at release time.
+- **`feat/*`** — short-lived feature branches off `dev` (optional).
+
 ## Releasing
 
-1. Update `version` in `pyproject.toml`.
-2. Add an entry to `CHANGELOG.md` under a new `## [x.y.z] - YYYY-MM-DD` heading.
-3. Commit: `git commit -am "release: vx.y.z"`
-4. Tag: `git tag vx.y.z`
-5. Push: `git push && git push --tags`
+1. Merge `dev` into `main`: `git checkout main && git merge dev`
+2. Update `version` in `pyproject.toml`.
+3. Add an entry to `CHANGELOG.md` under a new `## [x.y.z] - YYYY-MM-DD` heading.
+4. Commit: `git commit -am "release: vx.y.z"`
+5. Tag: `git tag vx.y.z`
+6. Push: `git push && git push --tags`
 
 Pushing a `v*` tag triggers the GitHub Actions workflow that builds and publishes to PyPI.
