@@ -201,6 +201,7 @@ def _build_job_prompt(
         agent_name=agent_name,
         context_sections=context_sections,
         transport_extra=transport.get_prompt_extra() if transport else "",
+        skill_filter=config.agent_skill_filter(agent_name),
     )
 
 
@@ -306,6 +307,8 @@ async def _execute_job(
             context_ratio=config.agent_context_ratio(agent_name),
             max_output_tokens=config.agent_max_output_tokens(agent_name),
             extra_tools=extra_tools,
+            tool_filter=config.agent_tool_filter(agent_name),
+            shared_dir=config.shared_dir,
         )
 
         # Postrun hook

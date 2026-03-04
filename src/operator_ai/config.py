@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import pwd
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -85,12 +86,40 @@ class TransportConfig(BaseModel):
         return value
 
 
+class ToolPermissions(BaseModel):
+    allow: list[str] | None = None
+    deny: list[str] | None = None
+
+    @model_validator(mode="after")
+    def validate_mutually_exclusive(self) -> ToolPermissions:
+        if self.allow is not None and self.deny is not None:
+            raise ValueError("tools: 'allow' and 'deny' are mutually exclusive")
+        return self
+
+
+class SkillPermissions(BaseModel):
+    allow: list[str] | None = None
+    deny: list[str] | None = None
+
+    @model_validator(mode="after")
+    def validate_mutually_exclusive(self) -> SkillPermissions:
+        if self.allow is not None and self.deny is not None:
+            raise ValueError("skills: 'allow' and 'deny' are mutually exclusive")
+        return self
+
+
+class PermissionsConfig(BaseModel):
+    tools: ToolPermissions = Field(default_factory=ToolPermissions)
+    skills: SkillPermissions = Field(default_factory=SkillPermissions)
+
+
 class AgentConfig(BaseModel):
     models: list[str] | None = None
     max_iterations: int | None = Field(default=None, gt=0)
     context_ratio: float | None = Field(default=None, gt=0.0, le=1.0)
     max_output_tokens: int | None = Field(default=None, gt=0)
     transport: TransportConfig | None = None
+    permissions: PermissionsConfig | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -222,11 +251,62 @@ class Config(BaseModel):
         """Return the configured timezone as a ZoneInfo instance."""
         return ZoneInfo(self.defaults.timezone)
 
+    @property
+    def shared_dir(self) -> Path:
+        return OPERATOR_DIR / "shared"
+
     def default_agent(self) -> str:
         """Return the first agent name from config, or 'default'."""
         if self.agents:
             return next(iter(self.agents))
         return "operator"
+
+    def agent_tool_filter(self, agent_name: str) -> Callable[[str], bool] | None:
+        """Return a predicate that returns True if a tool name is allowed, or None for no filtering."""
+        agent = self.agents.get(agent_name)
+        if not agent or not agent.permissions:
+            return None
+        perms = agent.permissions.tools
+        if perms.allow is not None:
+            allowed = set(perms.allow)
+            return lambda name: name in allowed
+        if perms.deny is not None:
+            denied = set(perms.deny)
+            return lambda name: name not in denied
+        return None
+
+    def agent_skill_filter(self, agent_name: str) -> Callable[[str], bool] | None:
+        """Return a predicate that returns True if a skill name is allowed, or None for no filtering."""
+        agent = self.agents.get(agent_name)
+        if not agent or not agent.permissions:
+            return None
+        perms = agent.permissions.skills
+        if perms.allow is not None:
+            allowed = set(perms.allow)
+            return lambda name: name in allowed
+        if perms.deny is not None:
+            denied = set(perms.deny)
+            return lambda name: name not in denied
+        return None
+
+
+def ensure_shared_symlink(workspace: Path, shared: Path) -> None:
+    """Ensure workspace/shared is a symlink to the shared directory."""
+    import logging
+
+    _logger = logging.getLogger("operator.config")
+    shared.mkdir(parents=True, exist_ok=True)
+    link = workspace / "shared"
+    if link.is_symlink():
+        if link.resolve() == shared.resolve():
+            return
+        link.unlink()
+    elif link.exists():
+        # Not a symlink but something else exists — don't clobber
+        _logger.warning("shared: %s exists and is not a symlink, skipping", link)
+        return
+    link.symlink_to(shared)
+    _logger.info("shared: created symlink %s → %s", link, shared)
 
 
 def _load_env_file(env_path: str, *, base_dir: Path | None = None) -> None:

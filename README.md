@@ -97,6 +97,39 @@ agents:
 
 Agents without a `transport` block are available for jobs and sub-agent spawning but have no chat interface.
 
+### Permissions
+
+Agents can be restricted to specific tools and skills using an opt-in permissions block:
+
+```yaml
+agents:
+  orchestrator:
+    transport: { ... }
+    # no permissions = full access (default)
+
+  researcher:
+    transport: { ... }
+    permissions:
+      tools:
+        allow: [read_file, list_files, web_fetch, search_memories]
+      skills:
+        deny: [deploy]
+```
+
+Rules:
+- **No `permissions` block** = full access to all tools and skills (backwards compatible).
+- `allow` and `deny` are **mutually exclusive** per category — setting both is a validation error.
+- **`allow`** — only the listed names are available; everything else is hidden.
+- **`deny`** — everything is available except the listed names.
+- Denied tools and skills are removed from the LLM's view entirely (tool list and system prompt).
+- Sub-agents inherit their parent's tool filter.
+
+### Shared Directory
+
+All agents share a `~/.operator/shared/` directory, symlinked into each agent's workspace as `workspace/shared/`. Use this for files that need to be accessible across agents — shared data, output handoffs, etc.
+
+The shared directory is created by `operator init` and the symlink is set up automatically on each agent run.
+
 ### Memory
 
 ```yaml
@@ -153,10 +186,12 @@ Everything lives under `~/.operator/`:
 ├── logs/
 ├── state/
 │   └── operator.db
+├── shared/                 # shared across all agents (symlinked into workspaces)
 ├── agents/
 │   └── <agent>/
 │       ├── AGENT.md
 │       └── workspace/
+│           └── shared/     # → ~/.operator/shared/ (symlink)
 ├── jobs/
 │   └── <job>/
 │       ├── JOB.md

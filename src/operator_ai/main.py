@@ -341,6 +341,8 @@ class Dispatcher:
                 max_output_tokens=self.config.agent_max_output_tokens(agent_name),
                 extra_tools=transport.get_tools(),
                 usage=usage,
+                tool_filter=self.config.agent_tool_filter(agent_name),
+                shared_dir=self.config.shared_dir,
             )
             logger.info("conversation %s — done", conversation_id)
             if usage:
@@ -384,6 +386,7 @@ class Dispatcher:
             ],
             pinned_memory_lines=pinned_lines,
             transport_extra=transport.get_prompt_extra(),
+            skill_filter=self.config.agent_skill_filter(agent_name),
         )
 
     async def _handle_command(

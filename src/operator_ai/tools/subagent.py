@@ -64,6 +64,8 @@ async def spawn_agent(task: str, context: str = "") -> str:
             max_output_tokens=current_context.get("max_output_tokens"),
             extra_tools=current_context.get("extra_tools"),
             usage=current_context.get("usage"),
+            tool_filter=current_context.get("tool_filter"),
+            shared_dir=current_context.get("shared_dir"),
         )
 
     # Run in a copied context so the child's configure() call doesn't

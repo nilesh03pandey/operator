@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from pathlib import Path
 
 from operator_ai.config import OPERATOR_DIR, Config
-from operator_ai.skills import build_skills_prompt, scan_skills
+from operator_ai.skills import SkillInfo, build_skills_prompt, scan_skills
 
 PROMPTS_DIR = Path(__file__).parent
 SYSTEM_PROMPT_PATH = OPERATOR_DIR / "SYSTEM.md"
@@ -40,9 +40,15 @@ def load_agent_prompt(config: Config, agent_name: str) -> str:
     return ""
 
 
-def load_skills_prompt(skills_dir: Path = SKILLS_DIR) -> str:
+def load_skills_prompt(
+    skills_dir: Path = SKILLS_DIR,
+    skill_filter: Callable[[str], bool] | None = None,
+) -> str:
     """Load available-skill metadata as markdown for system prompt injection."""
-    return build_skills_prompt(scan_skills(skills_dir))
+    skills: list[SkillInfo] = scan_skills(skills_dir)
+    if skill_filter is not None:
+        skills = [s for s in skills if skill_filter(s.name)]
+    return build_skills_prompt(skills)
 
 
 def assemble_system_prompt(
@@ -53,6 +59,7 @@ def assemble_system_prompt(
     pinned_memory_lines: Iterable[str] = (),
     transport_extra: str = "",
     skills_dir: Path = SKILLS_DIR,
+    skill_filter: Callable[[str], bool] | None = None,
 ) -> str:
     """Assemble the runtime system prompt with shared ordering for chat and jobs.
 
@@ -67,7 +74,7 @@ def assemble_system_prompt(
         load_agent_prompt(config, agent_name),
     ]
 
-    skills_prompt = load_skills_prompt(skills_dir)
+    skills_prompt = load_skills_prompt(skills_dir, skill_filter=skill_filter)
     if skills_prompt:
         stable.append(skills_prompt)
 

@@ -8,6 +8,7 @@ from typing import Any
 
 import litellm
 
+from operator_ai.config import ensure_shared_symlink
 from operator_ai.prompts import CACHE_BOUNDARY
 from operator_ai.tools import registry as tool_registry
 from operator_ai.tools import set_workspace, subagent
@@ -103,6 +104,8 @@ async def run_agent(
     max_output_tokens: int | None = None,
     extra_tools: list[ToolDef] | None = None,
     usage: dict[str, int] | None = None,
+    tool_filter: Callable[[str], bool] | None = None,
+    shared_dir: Path | None = None,
 ) -> str:
     """Core agentic loop: LLM -> tool exec -> repeat until text response.
 
@@ -113,6 +116,8 @@ async def run_agent(
     """
     ws = Path(workspace)
     ws.mkdir(parents=True, exist_ok=True)
+    if shared_dir is not None:
+        ensure_shared_symlink(ws, shared_dir)
     set_workspace(ws)
 
     # Configure subagent tool with current context
@@ -126,12 +131,23 @@ async def run_agent(
             "max_output_tokens": max_output_tokens,
             "extra_tools": extra_tools,
             "usage": usage,
+            "tool_filter": tool_filter,
+            "shared_dir": shared_dir,
         }
     )
 
     tools = tool_registry.get_tools()
     if extra_tools:
         tools = tools + list(extra_tools)
+    if tool_filter is not None:
+        all_names = [t.name for t in tools]
+        tools = [t for t in tools if tool_filter(t.name)]
+        filtered_out = set(all_names) - {t.name for t in tools}
+        if filtered_out:
+            logger.info("permissions: filtered out tools: %s", ", ".join(sorted(filtered_out)))
+        logger.debug(
+            "permissions: %d tools available: %s", len(tools), ", ".join(t.name for t in tools)
+        )
     tools_by_name = {t.name: t for t in tools}
     tool_defs = [t.to_openai_tool() for t in tools]
 

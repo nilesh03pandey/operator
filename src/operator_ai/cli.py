@@ -135,6 +135,7 @@ def init() -> None:
         home / "agents" / "operator" / "workspace",
         home / "jobs",
         home / "skills",
+        home / "shared",
     ]
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
