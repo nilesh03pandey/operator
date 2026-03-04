@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-03-04
+
+### Added
+
+- Per-job model override via `model` field in JOB.md frontmatter
+
 ## [0.2.0] - 2026-03-04
 
 ### Added
 
 - `operator init` command to scaffold `~/.operator/` with starter config and agent
-- Per-job model override via `model` field in JOB.md frontmatter
 
 ### Fixed
 
