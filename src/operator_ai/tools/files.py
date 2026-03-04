@@ -1,0 +1,118 @@
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+
+from operator_ai.tools.registry import tool
+from operator_ai.tools.workspace import get_workspace
+
+MAX_READ_BYTES = 1_000_000  # 1 MB
+_MAX_OUTPUT = 16_384  # 16 KB — keeps tool results within ~4K tokens
+
+
+def _resolve(path: str) -> Path:
+    """Resolve a path inside the agent workspace."""
+    workspace = get_workspace().resolve()
+    candidate = (workspace / Path(path).expanduser()).resolve()
+    try:
+        candidate.relative_to(workspace)
+    except ValueError as e:
+        raise ValueError(f"path escapes workspace: {path}") from e
+    return candidate
+
+
+@tool(description="Read the contents of a file.")
+async def read_file(path: str) -> str:
+    """Read a file.
+
+    Args:
+        path: File path inside the agent workspace.
+    """
+    try:
+        p = _resolve(path)
+    except ValueError as e:
+        return f"[error: {e}]"
+    if not p.exists():
+        return f"[error: file not found: {path}]"
+    try:
+        size = p.stat().st_size
+        data = p.read_bytes()[:MAX_READ_BYTES]
+        text = data.decode(errors="replace")
+        if len(text) > _MAX_OUTPUT:
+            text = (
+                text[:_MAX_OUTPUT] + f"\n[truncated — output exceeded 16KB, file is {size} bytes]"
+            )
+        elif size > MAX_READ_BYTES:
+            text += f"\n[truncated at {MAX_READ_BYTES} bytes, file is {size} bytes]"
+        return text
+    except Exception as e:
+        return f"[error reading file: {e}]"
+
+
+@tool(description="Write content to a file. Creates parent directories if needed.")
+async def write_file(path: str, content: str) -> str:
+    """Write a file.
+
+    Args:
+        path: File path inside the agent workspace.
+        content: The content to write.
+    """
+    try:
+        p = _resolve(path)
+    except ValueError as e:
+        return f"[error: {e}]"
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content)
+        return f"Wrote {len(content)} bytes to {p}"
+    except Exception as e:
+        return f"[error writing file: {e}]"
+
+
+@tool(description="List files and directories at the given path.")
+async def list_files(path: str = ".", max_depth: int = 2) -> str:
+    """List directory contents.
+
+    Args:
+        path: Directory path to list (default: current directory).
+        max_depth: Maximum depth to recurse (default: 2).
+    """
+    try:
+        root = _resolve(path)
+    except ValueError as e:
+        return f"[error: {e}]"
+    if not root.is_dir():
+        return f"[error: not a directory: {path}]"
+
+    def _walk_sync() -> list[str]:
+        lines: list[str] = []
+        workspace = get_workspace().resolve()
+
+        def _walk(p: Path, depth: int, prefix: str = "") -> None:
+            if depth > max_depth:
+                return
+            try:
+                entries = sorted(p.iterdir(), key=lambda e: (not e.is_dir(), e.name))
+            except PermissionError:
+                lines.append(f"{prefix}[permission denied]")
+                return
+            for entry in entries:
+                name = entry.name
+                if name.startswith("."):
+                    continue
+                if entry.is_dir() and not entry.is_symlink():
+                    try:
+                        entry.resolve().relative_to(workspace)
+                    except ValueError:
+                        lines.append(f"{prefix}{name}/ [outside workspace]")
+                        continue
+                    lines.append(f"{prefix}{name}/")
+                    _walk(entry, depth + 1, prefix + "  ")
+                else:
+                    lines.append(f"{prefix}{name}")
+
+        _walk(root, 1)
+        return lines
+
+    lines = await asyncio.to_thread(_walk_sync)
+    return "\n".join(lines) if lines else "[empty directory]"

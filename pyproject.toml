@@ -1,0 +1,84 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "operator-ai"
+version = "0.1.0"
+description = "Local AI agent connecting chat platforms to LLMs via LiteLLM"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Gavin Vickery", email = "gavin@geekforbrains.com" }]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "litellm",
+    "slack-bolt",
+    "slack-sdk",
+    "aiohttp",
+    "pyyaml",
+    "pydantic",
+    "markdown-to-mrkdwn",
+    "croniter",
+    "trafilatura",
+    "sqlite-vec",
+    "pysqlite3",
+    "rich",
+    "typing-extensions",
+    "typer",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+operator = "operator_ai.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/geekforbrains/operator"
+Issues = "https://github.com/geekforbrains/operator/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/operator_ai"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "F",     # pyflakes
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+    "RUF",   # ruff-specific rules
+    "ARG",   # flake8-unused-arguments
+    "PTH",   # flake8-use-pathlib
+    "T20",   # flake8-print
+]
+ignore = [
+    "E501",  # line length handled by formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/operator_ai/transport/base.py" = ["ARG002", "B027"]  # interface defaults have unused args and empty bodies by design
+"src/operator_ai/cli.py" = ["T20"]  # CLI outputs via print()
+"src/operator_ai/commands.py" = ["ARG001"]  # command handlers have uniform signature
+"src/operator_ai/main.py" = ["ARG002"]  # _handle_command signature includes conversation_id for logging
+
+[tool.ruff.lint.isort]
+known-first-party = ["operator_ai"]
+
+[tool.ruff.format]
+quote-style = "double"

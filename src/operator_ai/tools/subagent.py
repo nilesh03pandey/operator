@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+import asyncio
+import contextvars
+from typing import Any
+
+from operator_ai.tools.registry import tool
+
+MAX_SUBAGENT_DEPTH = 3
+
+_context_var: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar("_agent_context")
+
+
+def configure(context: dict[str, Any]) -> None:
+    _context_var.set(context)
+
+
+@tool(
+    description="Spawn a sub-agent to handle a focused sub-task. The sub-agent gets its own conversation and runs to completion. Returns the sub-agent's final response.",
+)
+async def spawn_agent(task: str, context: str = "") -> str:
+    """Spawn a sub-agent for a focused sub-task.
+
+    Args:
+        task: Clear description of what the sub-agent should accomplish.
+        context: Optional additional context or data for the sub-agent.
+    """
+    current_context = _context_var.get({})
+    depth = current_context.get("depth", 0)
+    if depth >= MAX_SUBAGENT_DEPTH:
+        return f"[error: max subagent depth ({MAX_SUBAGENT_DEPTH}) reached]"
+
+    system_prompt = (
+        "You are a focused sub-agent. Complete the given task and return a clear, "
+        "concise result. You have access to the same tools as the parent agent."
+    )
+    if context:
+        system_prompt += f"\n\nAdditional context:\n{context}"
+
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": task},
+    ]
+
+    # Lazy import to avoid circular dependency (agent -> subagent -> agent)
+    from operator_ai.agent import run_agent
+
+    coro = run_agent(
+        messages=messages,
+        models=current_context["models"],
+        max_iterations=min(current_context.get("max_iterations", 10), 10),
+        workspace=current_context.get("workspace", "."),
+        depth=depth + 1,
+        context_ratio=current_context.get("context_ratio", 0.0),
+        max_output_tokens=current_context.get("max_output_tokens"),
+        extra_tools=current_context.get("extra_tools"),
+        usage=current_context.get("usage"),
+    )
+    # Run in a copied context so the child's configure() call doesn't
+    # overwrite the parent's ContextVars (depth, workspace, etc.).
+    return await asyncio.create_task(coro, context=contextvars.copy_context())
