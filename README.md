@@ -59,7 +59,8 @@ defaults:
     - "anthropic/claude-sonnet-4-6"
   max_iterations: 25
   context_ratio: 0.5
-  # env_file: "~/.env"        # Load API keys from a dotenv file
+  # timezone: "America/Vancouver" # IANA timezone (default: UTC)
+  # env_file: "~/.env"           # Load API keys from a dotenv file
 
 agents:
   operator:
@@ -273,6 +274,8 @@ operator memories stats        # memory counts per scope
 operator config                # print resolved configuration as JSON
 operator agents                # list configured agents with transport and model info
 operator skills                # list discovered skills with env status
+operator skills reset <name>   # reset a bundled skill to its original version
+operator skills reset --all    # reset all bundled skills
 ```
 
 ### Agent Resolution
@@ -340,6 +343,7 @@ Each job tracks four counters in SQLite:
 - `send_message`
 - `spawn_agent`
 - `manage_job`
+- `manage_skill`
 - `save_memory`
 - `search_memories`
 - `forget_memory`
@@ -348,6 +352,12 @@ Each job tracks four counters in SQLite:
 - `kv_set`
 - `kv_delete`
 - `kv_list`
+
+Transports may provide additional tools. The Slack transport adds:
+
+- `list_channels`
+- `read_channel`
+- `read_thread`
 
 ## Commands
 

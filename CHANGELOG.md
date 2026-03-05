@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-04
+
+### Added
+
+- Agent permissions system with allow/deny lists for tools and skills
+- Shared directory (`~/.operator/shared/`) symlinked into all agent workspaces
+- Bundled skills shipped with the package (installed on `operator init`)
+- `manage_skill` tool for agents to create, update, and delete skills at runtime
+- `operator skills reset` CLI command to restore bundled skills to their original version
+- Transport-scoped read tools: `read_channel` and `read_thread` for the Slack transport
+- Configurable timezone via `defaults.timezone` (IANA format, defaults to UTC)
+
+### Fixed
+
+- Default agent renamed from `hermy`/`default` to `operator`
+
 ## [0.2.2] - 2026-03-04
 
 ### Fixed
