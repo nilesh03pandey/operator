@@ -17,7 +17,8 @@ from operator_ai.config import OPERATOR_DIR, Config, load_config
 from operator_ai.jobs import JobRunner
 from operator_ai.log_context import RunContextFilter, new_run_id, set_run_context
 from operator_ai.memory import MemoryCleaner, MemoryHarvester, MemoryStore
-from operator_ai.prompts import assemble_system_prompt
+from operator_ai.prompts import SKILLS_DIR, assemble_system_prompt
+from operator_ai.skills import install_bundled_skills
 from operator_ai.status import StatusIndicator
 from operator_ai.store import Store, get_store
 from operator_ai.tools import kv as kv_tools
@@ -510,6 +511,8 @@ async def async_main() -> None:
 
     try:
         config = load_config()
+        install_bundled_skills(SKILLS_DIR)
+
         if not any(a.transport for a in config.agents.values()):
             logger.error("No transports configured in %s", OPERATOR_DIR / "operator.yaml")
             sys.exit(1)

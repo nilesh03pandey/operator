@@ -46,6 +46,7 @@ Issues = "https://github.com/geekforbrains/operator/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/operator_ai"]
+artifacts = ["src/operator_ai/bundled_skills/**"]
 
 [tool.ruff]
 target-version = "py311"

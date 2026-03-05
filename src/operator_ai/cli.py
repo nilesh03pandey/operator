@@ -29,10 +29,12 @@ kv_app = typer.Typer(help="Key-value store operations.")
 job_app = typer.Typer(help="Job inspection and management.")
 service_app = typer.Typer(help="Manage the operator background service.")
 memory_app = typer.Typer(help="Browse and inspect memories.")
+skill_app = typer.Typer(help="Manage skills.")
 app.add_typer(kv_app, name="kv")
 app.add_typer(job_app, name="job")
 app.add_typer(service_app, name="service")
 app.add_typer(memory_app, name="memories")
+app.add_typer(skill_app, name="skills")
 
 LOG_DIR = OPERATOR_DIR / "logs"
 LOG_FILE = LOG_DIR / "operator.log"
@@ -156,6 +158,13 @@ def init() -> None:
         else:
             path.write_text(content)
             console.print(f"  [green]wrote[/green]  {path}")
+
+    # Install bundled skills
+    from operator_ai.skills import install_bundled_skills
+
+    installed = install_bundled_skills(home / "skills")
+    for skill_name in installed:
+        console.print(f"  [green]skill[/green]  {skill_name}")
 
     console.print(f"\n[bold green]Operator initialized at {home}[/bold green]")
     console.print("Edit [bold]operator.yaml[/bold] to configure your agents and transports.")
@@ -721,12 +730,24 @@ def show_agents() -> None:
     console.print(table)
 
 
-# ── Skills command ───────────────────────────────────────────
+# ── Skills commands ──────────────────────────────────────────
 
 
-@app.command("skills")
-def show_skills() -> None:
+@skill_app.callback(invoke_without_command=True)
+def skills_main(ctx: typer.Context) -> None:
     """List discovered skills."""
+    if ctx.invoked_subcommand is not None:
+        return
+    _show_skills()
+
+
+@skill_app.command("list")
+def skills_list() -> None:
+    """List discovered skills."""
+    _show_skills()
+
+
+def _show_skills() -> None:
     from operator_ai.skills import scan_skills
 
     skills_dir = OPERATOR_DIR / "skills"
@@ -752,6 +773,39 @@ def show_skills() -> None:
             env_status = Text("ok", style="green")
         table.add_row(s.name, desc, env_status)
     console.print(table)
+
+
+@skill_app.command("reset")
+def skills_reset(
+    name: str = typer.Argument(None, help="Bundled skill name to reset."),
+    all_skills: bool = typer.Option(False, "--all", help="Reset all bundled skills."),
+) -> None:
+    """Reset bundled skill(s) to their original version."""
+    from operator_ai.skills import list_bundled_skill_names, reset_bundled_skill
+
+    skills_dir = OPERATOR_DIR / "skills"
+    bundled = list_bundled_skill_names()
+
+    if not bundled:
+        console.print("No bundled skills available.")
+        raise typer.Exit()
+
+    if name is None and not all_skills:
+        console.print("Available bundled skills:\n")
+        for n in bundled:
+            console.print(f"  {n}")
+        console.print("\nUsage: [bold]operator skills reset <name>[/bold] or [bold]--all[/bold]")
+        raise typer.Exit()
+
+    targets = bundled if all_skills else [name]
+    for n in targets:
+        if not reset_bundled_skill(n, skills_dir):
+            console.print(f"'{n}' is not a bundled skill.", style="red")
+            raise typer.Exit(code=1)
+        console.print(f"  [green]reset[/green] {n}")
+
+    if all_skills:
+        console.print(f"\nReset {len(targets)} bundled skill(s).")
 
 
 # ── Entry point ──────────────────────────────────────────────
