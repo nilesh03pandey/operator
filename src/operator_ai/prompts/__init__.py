@@ -23,6 +23,7 @@ def load_prompt(name: str) -> str:
     path = PROMPTS_DIR / name
     return path.read_text().strip()
 
+print(load_prompt("cleaner.md"))
 
 def load_system_prompt() -> str:
     """Load SYSTEM.md from disk, creating it from the bundled default if missing."""

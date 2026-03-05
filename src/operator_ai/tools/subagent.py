@@ -4,8 +4,12 @@ import asyncio
 import contextvars
 from typing import Any
 
-from operator_ai.log_context import get_run_context, new_run_id, set_run_context
+import sys
+
+from operator_a.log_context import get_run_context, new_run_id, set_run_context
 from operator_ai.tools.registry import tool
+from operator_ai.prompts import load_agent_prompt
+
 
 MAX_SUBAGENT_DEPTH = 3
 
@@ -19,13 +23,16 @@ def configure(context: dict[str, Any]) -> None:
 @tool(
     description="Spawn a sub-agent to handle a focused sub-task. The sub-agent gets its own conversation and runs to completion. Returns the sub-agent's final response.",
 )
-async def spawn_agent(task: str, context: str = "") -> str:
+async def spawn_agent(task: str, context: str = "", agent: str = None) -> str:
     """Spawn a sub-agent for a focused sub-task.
 
     Args:
         task: Clear description of what the sub-agent should accomplish.
         context: Optional additional context or data for the sub-agent.
     """
+
+    
+
     current_context = _context_var.get({})
     depth = current_context.get("depth", 0)
     if depth >= MAX_SUBAGENT_DEPTH:
@@ -38,10 +45,41 @@ async def spawn_agent(task: str, context: str = "") -> str:
     if context:
         system_prompt += f"\n\nAdditional context:\n{context}"
 
+    
+
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": task},
     ]
+
+    config = current_context.get("config")
+    if not config:
+        # or raise error 
+        pass
+
+    if agent and isinstance(agent, str):
+        agent = agent.strip().lower()
+        
+        if not agent:
+            # empty after strip then skip or log
+            pass
+        else:
+            agent_prompt = load_agent_prompt(config, agent)
+            
+            if agent_prompt:  
+                new_system_content = (f"{agent_prompt}")
+                # Safely insert/replace system prompt at the beginning
+                if messages and messages[0].get("role") == "system":
+                    # Merge into existing system prompt (preserves order)
+                    messages[0]["content"] = new_system_content + "\n\n" + messages[0]["content"]
+                else:
+                    messages.insert(0, {"role": "system", "content": new_system_content})
+
+                # print(f"Applied agent prompt for '{agent}'")
+            else:
+                # logger.warning(f"No prompt found for agent: {agent}")
+                pass
+
 
     # Lazy import to avoid circular dependency (agent -> subagent -> agent)
     from operator_ai.agent import run_agent
